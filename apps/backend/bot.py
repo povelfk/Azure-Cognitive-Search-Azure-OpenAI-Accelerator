@@ -16,11 +16,14 @@ from langchain.callbacks.manager import CallbackManager
 from langchain.schema import AgentAction, AgentFinish, LLMResult
 
 #custom libraries that we will use later in the app
-from utils import DocSearchTool, CSVTabularTool, SQLDbTool, ChatGPTTool, BingSearchTool, run_agent
-from prompts import WELCOME_MESSAGE, CUSTOM_CHATBOT_PREFIX, CUSTOM_CHATBOT_SUFFIX
+from utils_povel import DocSearchTool, CSVTabularTool, SQLDbTool, ChatGPTTool, BingSearchTool, run_agent
+from prompts_povel import WELCOME_MESSAGE, CUSTOM_CHATBOT_PREFIX, CUSTOM_CHATBOT_SUFFIX
 
 from botbuilder.core import ActivityHandler, TurnContext
 from botbuilder.schema import ChannelAccount, Activity, ActivityTypes
+
+from azure.monitor.events.extension import track_event
+from azure.monitor.opentelemetry import configure_azure_monitor
 
 # Env variables needed by langchain
 os.environ["OPENAI_API_BASE"] = os.environ.get("AZURE_OPENAI_ENDPOINT")
@@ -84,23 +87,18 @@ class MyBot(ActivityHandler):
         llm = AzureChatOpenAI(deployment_name=self.model_name, temperature=0.5, max_tokens=1000, callback_manager=cb_manager)
 
         # Initialize our Tools/Experts
-        text_indexes = ["cogsrch-index-files", "cogsrch-index-csv"]
-        doc_search = DocSearchTool(llm=llm, indexes=text_indexes,
-                           k=10, similarity_k=4, reranker_th=1,
-                           sas_token=os.environ['BLOB_SAS_TOKEN'],
-                           callback_manager=cb_manager, return_direct=True)
-        vector_only_indexes = ["cogsrch-index-books-vector"]
-        book_search = DocSearchTool(llm=llm, vector_only_indexes = vector_only_indexes,
+        vector_only_indexes = ["1b-digge-100-full", "digge-ekonomi-index-files-on-your-data"]
+        doc_search = DocSearchTool(llm=llm, vector_only_indexes = vector_only_indexes,
                            k=10, similarity_k=10, reranker_th=1,
                            sas_token=os.environ['BLOB_SAS_TOKEN'],
                            callback_manager=cb_manager, return_direct=True,
-                           name="@booksearch",
-                           description="useful when the questions includes the term: @booksearch.\n")
+                           name="@doc_search",
+                           description="useful when the questions includes the term: @doc_search.\n")
         www_search = BingSearchTool(llm=llm, k=5, callback_manager=cb_manager, return_direct=True)
         sql_search = SQLDbTool(llm=llm, k=10, callback_manager=cb_manager, return_direct=True)
         chatgpt_search = ChatGPTTool(llm=llm, callback_manager=cb_manager, return_direct=True)
 
-        tools = [www_search, sql_search, doc_search, chatgpt_search, book_search]
+        tools = [www_search, sql_search, doc_search, chatgpt_search]
 
         # Set brain Agent with persisten memory in CosmosDB
         cosmos = CosmosDBChatMessageHistory(
